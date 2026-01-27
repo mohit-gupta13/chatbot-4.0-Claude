@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel Chatbot</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>Travel Assistant</span>
+            <span style="float: right; cursor: pointer; font-size: 20px;" onclick="toggleChat()">×</span>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot">Hello! I am your travel assistant. How can I help you today?</div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="user-input" placeholder="Type a message..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+    <button class="chat-toggle-btn" onclick="toggleChat()">💬</button>
+
+    <script>
+        let lastUserMessage = "";
+
+        async function sendMessage() {
+            const inputField = document.getElementById('user-input');
+            const message = inputField.value.trim();
+            if (message === "") return;
+
+            // Remove any existing feedback buttons before sending new message
+            removeFeedbackButtons();
+
+            lastUserMessage = message; // Store for feedback
+            addMessage(message, 'user');
+            inputField.value = '';
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+                const data = await response.json();
+                addMessage(data.response, 'bot', true); // Treat as HTML
+
+                if (data.show_feedback) {
+                    addFeedbackButtons();
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage("Sorry, something went wrong.", 'bot');
+            }
+        }
+
+        function addMessage(text, sender, isHtml = false) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            if (isHtml) {
+                messageDiv.innerHTML = text;
+            } else {
+                messageDiv.textContent = text;
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return messageDiv;
+        }
+
+        function addFeedbackButtons() {
+            const chatMessages = document.getElementById('chat-messages');
+            const feedbackDiv = document.createElement('div');
+            feedbackDiv.className = 'feedback-container';
+            feedbackDiv.id = 'current-feedback';
+
+            feedbackDiv.innerHTML = `
+                <div style="font-size: 0.9em; color: #666; width: 100%; margin-bottom: 5px;">Was this helpful?</div>
+                <button class="feedback-btn yes" onclick="handleFeedback(true)">👍 Yes</button>
+                <button class="feedback-btn no" onclick="handleFeedback(false)">👎 No</button>
+            `;
+
+            chatMessages.appendChild(feedbackDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeFeedbackButtons() {
+            const currentFeedback = document.getElementById('current-feedback');
+            if (currentFeedback) {
+                currentFeedback.remove();
+            }
+        }
+
+        async function handleFeedback(isHelpful) {
+            removeFeedbackButtons();
+
+            // Send feedback to server
+            try {
+                await fetch('/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: lastUserMessage,
+                        helpful: isHelpful
+                    })
+                });
+            } catch (error) {
+                console.error('Error sending feedback:', error);
+            }
+
+            if (isHelpful) {
+                addMessage("Glad I could help!", 'bot');
+            } else {
+                addMessage("I apologize if my answer wasn't helpful. Please contact our customer support for further assistance.", 'bot', true);
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function toggleChat() {
+            const chatContainer = document.querySelector('.chat-container');
+            chatContainer.classList.toggle('open');
+        }
+    </script>
+</body>
+
+</html>
