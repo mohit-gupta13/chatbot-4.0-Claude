@@ -33,7 +33,7 @@ class DataService:
                 from config import Config
                 excel_file = Config.BOOKING_FILE
             except:
-                excel_file = "flight Booking.xlsx"
+                excel_file = "Existing Booking.xlsx"
         
         self.excel_file = excel_file
         self._df = None
@@ -127,7 +127,6 @@ class DataService:
             
             if agent_name:
                 # Map 'agent_name' to 'Client Name' or 'Created By' or 'Branch' as appropriate
-                # The user mentioned 'Client Name' and 'Branch'
                 df = self._safe_filter(df, 'Client Name', agent_name)
             
             if pax_name:
@@ -184,6 +183,7 @@ class DataService:
         return cleaned
 
     def get_column_names(self) -> List[str]:
+        """Get list of column names from the data"""
         df = self._load_data()
         return df.columns.tolist()
 
@@ -191,6 +191,7 @@ class DataService:
 _data_service_instance = None
 
 def get_data_service() -> DataService:
+    """Get or create singleton data service instance"""
     global _data_service_instance
     if _data_service_instance is None:
         _data_service_instance = DataService()

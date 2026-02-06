@@ -22,7 +22,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Mount static files if directory exists
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class ChatRequest(BaseModel):
     message: str
@@ -34,32 +36,59 @@ class FeedbackRequest(BaseModel):
 def log_feedback(question: str, helpful: bool):
     """Simple logging for user feedback"""
     print(f"FEEDBACK: Question: '{question}', Helpful: {helpful}")
+    # You can expand this to save to a file or database if needed
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize system on startup"""
     try:
+        print("=" * 60)
+        print("🚀 Initializing Travel Agent AI Chatbot")
+        print("=" * 60)
+        
+        # Validate configuration
+        Config.validate()
+        print("✓ Configuration validated")
+        
         # Initialize Vector DB Knowledge Base
         vector_service = get_vector_service()
         vector_service.initialize_knowledge_base()
-        print("System initialized successfully.")
+        print("✓ Vector database initialized")
+        
+        # Warm up LLM service (initializes AWS Bedrock connection)
+        llm_service = get_llm_service()
+        print("✓ AWS Bedrock Claude connection established")
+        
+        # Test data service
+        data_service = get_data_service()
+        columns = data_service.get_column_names()
+        print(f"✓ Data service loaded ({len(columns)} columns found)")
+        
+        print("=" * 60)
+        print("✅ System initialized successfully")
+        print("=" * 60)
+        
     except Exception as e:
-        print(f"Startup Error: {e}")
+        print("=" * 60)
+        print(f"❌ Startup Error: {e}")
+        print("=" * 60)
+        import traceback
+        traceback.print_exc()
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
     """
     Main GenAI chat endpoint.
-    Uses LangChain + Ollama Agent.
+    Uses AWS Bedrock Claude with LangChain Agent and RAG.
     """
     try:
         user_message = request.message
         
-        # 1. Initialize services
+        # Initialize LLM service
         llm_service = get_llm_service()
         
-        # 2. Process query with LLM Agent
-        # The agent now handles the tool calling internally
+        # Process query with LangChain Agent
+        # The agent handles tool calling internally and returns natural language response
         llm_result = llm_service.process_query(user_message)
         
         if not llm_result.get("success"):
@@ -68,8 +97,7 @@ async def chat(request: ChatRequest):
                 "response_type": "error"
             }
         
-        # 3. Return Response
-        # LangChain agent returns the final natural language answer
+        # Return agent's response
         return {
             "response": llm_result["response"],
             "response_type": "text"
@@ -77,6 +105,8 @@ async def chat(request: ChatRequest):
                 
     except Exception as e:
         print(f"CHAT ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "response": f"An internal error occurred: {str(e)}",
             "response_type": "error"
@@ -93,16 +123,34 @@ async def status():
     """Check system health"""
     return {
         "status": "online",
-        "llm": Config.OLLAMA_MODEL,
-        "vector_db": "chroma",
+        "llm_provider": "AWS Bedrock",
+        "llm_model": Config.BEDROCK_MODEL_ID,
+        "vector_db": "Chroma",
+        "embedding_model": Config.EMBEDDING_MODEL,
         "data_file": Config.BOOKING_FILE,
-        "data_found": os.path.exists(Config.BOOKING_FILE)
+        "data_found": os.path.exists(Config.BOOKING_FILE),
+        "chroma_dir": Config.CHROMA_DB_DIR,
+        "chroma_exists": os.path.exists(Config.CHROMA_DB_DIR)
     }
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    with open("static/index.html", "r") as f:
-        return f.read()
+    """Serve the main HTML page"""
+    html_path = "static/index.html"
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
+    else:
+        return """
+        <html>
+            <head><title>Travel Agent Chatbot</title></head>
+            <body>
+                <h1>Travel Agent AI Chatbot</h1>
+                <p>API is running. Access the chat interface at <code>/static/index.html</code></p>
+                <p>Check system status at <code>/status</code></p>
+            </body>
+        </html>
+        """
 
 def main():
     import uvicorn

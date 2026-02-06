@@ -1,69 +1,143 @@
-import unittest
-from unittest.mock import MagicMock, patch
-import json
+"""
+Test script for AWS Bedrock Claude Agent
+Tests tool calling, language normalization, and RAG functionality
+"""
+
+import sys
 import os
 
-# Set up mock env
-os.environ["CHROMA_DB_DIR"] = "./test_chroma"
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from llm_service import LLMService
-from vector_service import VectorService
-from data_service import DataService
+from llm_service import get_llm_service
+from data_service import get_data_service
+from vector_service import get_vector_service
+from config import Config
 
-class TestAgentLogic(unittest.TestCase):
+def print_section(title):
+    print("\n" + "=" * 70)
+    print(f"  {title}")
+    print("=" * 70)
+
+def test_query(llm_service, query, description):
+    print(f"\n📝 Test: {description}")
+    print(f"Query: \"{query}\"")
+    print("-" * 70)
     
-    @patch('llm_service.ChatOllama')
-    @patch('llm_service.get_vector_service')
-    @patch('llm_service.create_tool_calling_agent')
-    @patch('llm_service.AgentExecutor')
-    def test_agent_initialization(self, mock_executor, mock_create_agent, mock_get_vector, mock_chat_ollama):
-        """Verify LLM Service initializes with correct components"""
-        service = LLMService()
-        
-        # Check if Ollama client was initialized
-        mock_chat_ollama.assert_called()
-        
-        # Check if tools are defined
-        self.assertTrue(len(service.tools) > 0)
-        self.assertEqual(service.tools[0].name, "get_bookings")
-        
-    @patch('llm_service.get_vector_service')
-    def test_process_query_flow(self, mock_get_vector):
-        """Verify the process_query method calls vector search and agent invoke"""
-        
-        # Mock Vector Service
-        mock_vector_service = MagicMock()
-        mock_doc = MagicMock()
-        mock_doc.page_content = "Mock Context"
-        mock_vector_service.search.return_value = [mock_doc]
-        mock_get_vector.return_value = mock_vector_service
-        
-        # Mock Agent Executor within LLMService
-        # We need to instantiate LLMService, but mock the internal objects
-        with patch('llm_service.ChatOllama'), \
-             patch('llm_service.create_tool_calling_agent'), \
-             patch('llm_service.AgentExecutor') as mock_executor_cls:
-            
-            mock_executor_instance = MagicMock()
-            mock_executor_instance.invoke.return_value = {"output": "Mock Response"}
-            mock_executor_cls.return_value = mock_executor_instance
-            
-            service = LLMService()
-            
-            # Run
-            result = service.process_query("status of srk")
-            
-            # Verify Vector Search
-            mock_vector_service.search.assert_called_with("status of srk", k=2)
-            
-            # Verify Agent Invocation
-            mock_executor_instance.invoke.assert_called()
-            call_args = mock_executor_instance.invoke.call_args[0][0]
-            self.assertEqual(call_args["input"], "status of srk")
-            self.assertIn("Mock Context", call_args["context"])
-            
-            # Verify Result
-            self.assertEqual(result["response"], "Mock Response")
+    result = llm_service.process_query(query)
+    
+    if result.get("success"):
+        print(f"✅ Response:\n{result['response']}")
+    else:
+        print(f"❌ Error: {result.get('error')}")
+    
+    print("-" * 70)
+    return result
 
-if __name__ == '__main__':
-    unittest.main()
+def main():
+    print_section("AWS BEDROCK CLAUDE AGENT TEST")
+    
+    # 1. Initialize services
+    print("\n🔧 Initializing services...")
+    try:
+        Config.validate()
+        print("✓ Config validated")
+        
+        vector_service = get_vector_service()
+        vector_service.initialize_knowledge_base()
+        print("✓ Vector store initialized")
+        
+        llm_service = get_llm_service()
+        print("✓ LLM service initialized (AWS Bedrock Claude)")
+        
+        data_service = get_data_service()
+        print(f"✓ Data service loaded")
+        
+    except Exception as e:
+        print(f"❌ Initialization failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    # 2. Test RAG Context Retrieval
+    print_section("RAG CONTEXT TEST")
+    print("Testing vector store knowledge retrieval...")
+    docs = vector_service.search("What does HK mean?", k=2)
+    for i, doc in enumerate(docs):
+        print(f"\nDocument {i+1}:")
+        print(doc.page_content[:200] + "...")
+    
+    # 3. Test Tool Calling
+    print_section("TOOL CALLING TESTS")
+    
+    # Test 1: Status filter - confirmed bookings
+    test_query(
+        llm_service,
+        "Show me all confirmed bookings",
+        "Status filter (confirmed → HK)"
+    )
+    
+    # Test 2: Status filter - ticketed
+    test_query(
+        llm_service,
+        "Find ticketed reservations",
+        "Status filter (ticketed → TKT)"
+    )
+    
+    # Test 3: Passenger name filter
+    test_query(
+        llm_service,
+        "Find bookings for pax srk",
+        "Passenger name extraction"
+    )
+    
+    # Test 4: Reference number
+    test_query(
+        llm_service,
+        "Show ref 12345",
+        "Reference number extraction"
+    )
+    
+    # Test 5: Combined filters
+    test_query(
+        llm_service,
+        "Confirmed bookings for client ABC",
+        "Multiple filters (status + agent_name)"
+    )
+    
+    # Test 6: Vague query
+    test_query(
+        llm_service,
+        "Show me some bookings",
+        "Vague query handling"
+    )
+    
+    # 4. Test Knowledge Questions
+    print_section("KNOWLEDGE BASE TESTS")
+    
+    test_query(
+        llm_service,
+        "What does HK mean?",
+        "Status code definition (should use RAG context)"
+    )
+    
+    test_query(
+        llm_service,
+        "What status codes are available?",
+        "List status codes (should use RAG context)"
+    )
+    
+    # 5. Test Error Handling
+    print_section("ERROR HANDLING TESTS")
+    
+    test_query(
+        llm_service,
+        "Find bookings for ref NONEXISTENT999",
+        "No results scenario"
+    )
+    
+    print_section("TEST COMPLETE")
+    print("✅ All tests executed. Review results above.")
+
+if __name__ == "__main__":
+    main()

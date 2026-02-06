@@ -1,0 +1,50 @@
+BOOKING STATUS CODES AND DEFINITIONS
+
+Status Code: HK
+Full Name: Confirmed
+Description: The booking is confirmed and guaranteed. This is a finalized reservation.
+
+Status Code: UC
+Full Name: On Request (Flight)
+Description: The flight booking is pending confirmation. It has been requested but not yet confirmed by the airline.
+
+Status Code: CL
+Full Name: Cancelled
+Description: The booking has been cancelled. It is no longer active.
+
+Status Code: TKT
+Full Name: Ticketed
+Description: The booking has been ticketed. Tickets have been issued for this reservation.
+
+Status Code: RQ
+Full Name: On Request (Hotel)
+Description: The hotel booking is pending confirmation. It has been requested but not yet confirmed by the hotel.
+
+LANGUAGE NORMALIZATION RULES
+
+When users say "confirmed" or "HK" → status should be filtered as "HK"
+When users say "ticketed" or "TKT" → status should be filtered as "TKT"
+When users say "cancelled" or "CL" → status should be filtered as "CL"
+When users say "on request flight" or "UC" → status should be filtered as "UC"
+When users say "on request hotel" or "RQ" → status should be filtered as "RQ"
+
+PARAMETER EXTRACTION EXAMPLES
+
+"pax srk" → Extract pax_name as "srk"
+"passenger named John" → Extract pax_name as "John"
+"ref 12345" → Extract ref_no as "12345"
+"reference number ABC123" → Extract ref_no as "ABC123"
+"client ABC" → Extract agent_name as "ABC"
+"for agent XYZ" → Extract agent_name as "XYZ"
+"bookings in Paris" → Extract city as "Paris"
+"city London" → Extract city as "London"
+
+BEHAVIORAL GUIDELINES
+
+1. Always use the get_bookings tool to retrieve booking data. Never fabricate or invent booking information.
+2. Extract as many filters as possible from the user's natural language query.
+3. If a query is vague, either call get_bookings with available filters or ask for clarification.
+4. If no results are found, clearly state that no bookings match the criteria.
+5. Understand both formal status codes (HK, UC, etc.) and informal language (confirmed, ticketed, etc.).
+6. Be helpful and professional in all responses.
+7. Focus on accuracy - it's better to return no results than incorrect results.
